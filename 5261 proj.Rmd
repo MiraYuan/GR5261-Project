@@ -59,31 +59,44 @@ for (i in 2:13){
 }
 names <- colnames(asset)[2:13]
 rbind(names, unlist(betas))
-
 ```
 
 ### Plots
 ```{r}
+library(ggplot2)
 ### Plots
-asset_l <- asset[,1:14] %>%
-  pivot_longer(!Date,  names_to = "Asset", values_to = "Price")
-return_l <- return[,1:14] %>%
-  pivot_longer(!Date,  names_to = "Asset", values_to = "Return")
-plot(asset$Date, asset$MSFT, type = "l", col = 2, ylim = c(0, 800))
-for (i in 3:14) {
-  lines(asset$Date, unlist(asset[, i]), type = "l", col = i)
+# asset_l <- asset[,1:14] %>%
+#   pivot_longer(!Date,  names_to = "Asset", values_to = "Price")
+# return_l <- return[,1:14] %>%
+#   pivot_longer(!Date,  names_to = "Asset", values_to = "Return")
+# 
+# ggplot(return_l, aes(x = Date, y = Return, col = Asset)) +
+#   geom_line()
+
+par(mfrow = c(3,3))
+### Price
+for(i in 2:13){
+  plot(asset$Date, unlist(asset[,i]), type = "l", col = i, 
+       main = paste(colnames(asset[,i])," price"))
+  abline(h=0)
 }
-legend("topleft", names,lty = 1, col = 2:14)
-plot(asset$Date, asset$AMZN, type = "l")
+
+### Return
+# for(i in 2:13){
+#   plot(return$Date, unlist(return[,i]), type = "l", col = i, 
+#        main = paste(colnames(return[,i])," return"))
+#   abline(h=0)
+# }
 ```
 
-### Equity curve
+### Equity curve ??
 ```{r}
 ### Equity curve
-par(mfrow = c(2,3))
+par(mfrow = c(3,3))
 for (i in 2:14) {
   plot(return$Date, unlist(return[, i]), type = "l",
-       ylab = colnames(return[, i]), xlab = "Date")
+       ylab = "Return", xlab = "Date", main = colnames(return[, i]))
+  abline(h=0)
 }
 ```
 
@@ -165,9 +178,8 @@ dis_df <- cbind(namesd,tdis,normal,ged)
 dis_df
 ```
 
-### Sharpe's Ratio
+### Sharpe's Slope ??
 ```{r}
-
 sharpes <- data.frame(matrix(ncol=13, nrow = 98))
 colnames(sharpes) <- colnames(return[1,2:14])
 
@@ -191,8 +203,6 @@ shar_df
 
 (return$MSFT-return$`Treasury Bill 3 month (rf)`/100)/sds_r[13]
 sds[1]
-
-
 ```
 
 ### M to Y
@@ -217,69 +227,280 @@ cov_mat
 ```
 
 ## Portfolio Theory
-### MVP
+### With Short Sale
 ```{r}
-mean_p <- sapply(return[2:13], mean)
-sd_p <- sapply(return[2:13], sd)
-cov_p <- cov(return[2:13])
+library(quadprog)
+R = 100*return[,2:13]
+mean_p <- apply(R,2,mean)
+cov_p <- cov(R)
+sd_vect_p <- sqrt(diag(cov_p))
+# min(mean_p)
+# max(mean_p)
 ### With shortsale
 M_p = length(mean_p)
-Amat_p <- cbind(rep(1,M_p), mean_p, diag(1,M_p), -diag(1,M_p))
-mu_P = seq(min(mean_p)+0.0001, max(mean_p)-0.0001, length = 300)
+Amat_p <- cbind(rep(1,M_p),mean_p)
+mu_P = seq(0.07, 5.4, length = 300)
 # Target portfolio means for the expect portfolio return
 sd_P = mu_P # set up storage for std dev's of portfolio returns
 weights_p = matrix(0, nrow = 300, ncol = M_p) # storage for return
 for (i in 1:length(mu_P)) { # find the optimal portfolios
-  bvec_p <- c(1, mu_P[i], rep(-0.1, M_p), rep(-0.5, M_p))
-  result = solve.QP(Dmat = 2 * cov_p, dvec = rep(0, M_p), Amat = Amat_p, 
+  bvec_p <- c(1, mu_P[i])
+  result_p = solve.QP(Dmat = 2 * cov_p, dvec = rep(0, M_p), Amat = Amat_p, 
                     bvec = bvec_p, meq = 2)
-  sd_P[i] = sqrt(result$value)
-  weights_p[i, ] = result$solution
+  sd_P[i] = sqrt(result_p$value)
+  weights_p[i, ] = result_p$solution
 }
-plot(sd_P, mu_P, type = "l", xlim = c(0, 0.2), ylim = c(0, 0.08), lty = 3, 
-     lwd = 2) 
+plot(sd_P, mu_P, type = "l", xlim = c(0,15), ylim = c(0, 6), lty = 3) 
 # plot efficient frontier (and inefficient portfolios below the min var portfolio)
-mufree_p = mean(return$`Treasury Bill 3 month (rf)`)/100
-points(0, mufree, cex = 4, pch = "*")
-
-
-
-M = length(mean_vect)
-Amat <- cbind(rep(1,M), mean_vect, diag(1, M), -diag(1, M))
-muP = seq(min(mean_vect)+0.0001, max(mean_vect)-0.0001, length = 300) 
-# Target portfolio means for the expect portfolio return
-sdP = muP # set up storage for std dev's of portfolio returns
-weights = matrix(0, nrow = 300, ncol = M) # storage for return
-for (i in 1:length(muP)) { # find the optimal portfolios
-  bvec <- c(1, muP[i], rep(-0.1, M), rep(-0.5, M))
-  result = solve.QP(Dmat = 2 * cov_mat, dvec = rep(0, M), Amat = Amat, 
-                    bvec = bvec, meq = 2)
-  sd_P[i] = sqrt(result$value)
-  weights[i, ] = result$solution
-}
-plot(sdP, muP, type = "l", xlim = c(0, 1), ylim = c(0, 0.05), lty = 3, 
-     lwd = 2) 
-# plot efficient frontier (and inefficient portfolios below the min var portfolio)
-mufree = 3 / 365 # input value of risk-free interest rate
-points(0, mufree, cex = 4, pch = "*") # show risk-free asset
-sharpe = (muP - mufree) / sdP # compute Sharpes ratios
-ind = (sharpe == max(sharpe)) # Find maximum Sharpes ratio
-(w_tan <- weights[ind, ]) # print the weights of the tangency portfolio
-lines(c(0, 2), mufree + c(0, 2) * (muP[ind] - mufree) / sdP[ind], lwd = 4, 
+mufree_p = mean(return$`Treasury Bill 3 month (rf)`)# input value of risk-free interest rate
+points(0, mufree_p, cex = 4, pch = "*") # show risk-free asset
+sharpe_p = (mu_P - mufree_p) / sd_P # compute Sharpes ratios
+ind_p = (sharpe_p == max(sharpe_p)) # Find maximum Sharpes ratio
+#weights_p[ind_p,] # print the weights of the tangency portfolio
+lines(c(0, 15), mufree_p + c(0, 15) * (mu_P[ind_p] - mufree_p) / sd_P[ind_p], lwd = 4, 
       lty = 1, col = "blue") # show line of optimal portfolios
-points(sdP[ind], muP[ind], cex = 4, pch = "*") # tangency portfolio
-ind2 = (sdP == min(sdP)) # find the minimum variance portfolio
-points(sdP[ind2], muP[ind2], cex = 2, pch = "+") # min var portfolio
-ind3 = (muP > muP[ind2])
-lines(sdP[ind3], muP[ind3], type = "l", xlim = c(0, 0.25), ylim = c(0, 0.3),
+points(sd_P[ind_p], mu_P[ind_p], cex = 4, pch = "*") # tangency portfolio
+ind2_p = (sd_P == min(sd_P)) # find the minimum variance portfolio
+points(sd_P[ind2_p], mu_P[ind2_p], cex = 2, pch = "+") # min var portfolio
+ind3_p = (mu_P > mu_P[ind2_p])
+lines(sd_P[ind3_p], mu_P[ind3_p], type = "l", xlim = c(0, 25), ylim = c(0,30),
       lwd = 3, col = 'red') # plot the efficient frontier
-text(sd_vect[1], mean_vect[1], 'GE', cex = 1)
-text(sd_vect[2], mean_vect[2], 'F', cex = 1)
-text(sd_vect[3], mean_vect[3], 'CAT', cex = 1)
-text(sd_vect[4], mean_vect[4], 'UTX', cex = 1)
-text(sd_vect[5], mean_vect[5], 'MRK', cex = 1)
-text(sd_vect[6], mean_vect[6], 'IBM', cex=1)
+for(i in 1:12){
+  text(sd_vect_p[i], mean_p[i],colnames(return[,i+1]), cex=0.8)
+}
+
+### MVP
+(mvp_meanreturn <- mu_P[ind2_p])
+(mvp_sd <- sd_P[ind2_p])
+weights_mvp <- weights_p[ind2_p,]
+weights_mvp <- t(data.frame(weights_mvp))
+colnames(weights_mvp) <- colnames(return[2:13])
+weights_mvp
+(mvp_meanreturn_ann <- mvp_meanreturn*12)
+(mvp_sd_ann <- mvp_sd*sqrt(12))
+
+### Efficient Portfolio Frontier
+EPF_mean <- mu_P[ind3_p]
+EPF_sd <- sd_P[ind3_p]
+
+### Tangency Portfolio
+(tan_meanreturn <- mu_P[ind_p])
+(tan_sd <- sd_P[ind_p])
+(tan_var <- tan_sd^2)
+(tan_sharpes <- (tan_meanreturn-mufree_p)/tan_sd)
 ```
+
+#### VaR&ES
+```{r warning=FALSE}
+### Tail dependence can be seen among the assets, therefore we can fit
+### our portfolio with multivariate t-distribution.
+
+## MVP VaR&ES
+library(MASS)
+alpha = 0.05
+return_mvp <- rowSums(data.frame(
+  weights_mvp[1] * return[, 2],
+  weights_mvp[2] * return[, 3],
+  weights_mvp[3] * return[, 4],
+  weights_mvp[4] * return[, 5],
+  weights_mvp[5] * return[, 6],
+  weights_mvp[6] * return[, 7],
+  weights_mvp[7] * return[, 8],
+  weights_mvp[8] * return[, 9],
+  weights_mvp[9] * return[, 10],
+  weights_mvp[10] * return[, 11],
+  weights_mvp[11] * return[, 12],
+  weights_mvp[12] * return[, 13]))
+fitt_mvp = fitdistr(return_mvp,"t")
+param_mvp = as.numeric(fitt_mvp$estimate)
+mean_mvpfit = param_mvp[1]
+df_mvpfit = param_mvp[3]
+sd_mvpfit = param_mvp[2] * sqrt((df_mvpfit) / (df_mvpfit - 2))
+lambda_mvpfit = param_mvp[2]
+qalpha_mvp = qt(alpha, df = df_mvpfit)
+VaR_par_mvp = -100000 * (mean_mvpfit + lambda_mvpfit * qalpha_mvp)
+es1_mvp = dt(qalpha_mvp, df = df_mvpfit) / (alpha)
+es2_mvp=(df_mvpfit+qalpha_mvp^2)/(df_mvpfit-1)
+es3_mvp=-mean_mvpfit+lambda_mvpfit*es1_mvp*es2_mvp
+ES_par_mvp = 100000*es3_mvp
+VaR_par_mvp
+ES_par_mvp
+
+
+## Asset VaR
+S0 = 100000
+qnalpha = qnorm(0.05)
+
+### MSFT
+q_msft = as.numeric(quantile(return$MSFT, alpha))
+VAR_msft = -S0 * q_msft
+#VAR_msft
+
+### TSLA
+fit_tsla <- fitdistr(return$TSLA, "normal")
+param_tsla = as.numeric(fit_tsla$estimate)
+mean_tsla = param_tsla[1]
+sd_tsla = param_tsla[2]
+VAR_tsla = -S0*(mean_tsla+qnalpha*sd_tsla)
+#VAR_tsla
+
+### AAPL
+fit_aapl <- fitdistr(return$AAPL, "normal")
+param_aapl = as.numeric(fit_aapl$estimate)
+mean_aapl = param_aapl[1]
+sd_aapl = param_aapl[2]
+VAR_aapl = -S0*(mean_aapl+qnalpha*sd_aapl)
+#VAR_aapl
+
+### TWTR
+fit_twtr <- fitdistr(return$TWTR, "normal")
+param_twtr = as.numeric(fit_twtr$estimate)
+mean_twtr = param_twtr[1]
+sd_twtr = param_twtr[2]
+VAR_twtr = -S0*(mean_twtr+qnalpha*sd_twtr)
+#VAR_twtr
+
+### AMZN
+fit_amzn <- fitdistr(return$AMZN, "normal")
+param_amzn = as.numeric(fit_amzn$estimate)
+mean_amzn = param_amzn[1]
+sd_amzn = param_amzn[2]
+VAR_amzn = -S0*(mean_amzn+qnalpha*sd_amzn)
+#VAR_amzn
+
+### FB
+q_fb = as.numeric(quantile(return$FB, alpha))
+VAR_fb = -S0 * q_fb
+#VAR_fb
+
+### NFLX
+q_nflx = as.numeric(quantile(return$NFLX, alpha))
+VAR_nflx = -S0 * q_nflx
+#VAR_nflx
+
+### AAL
+q_aal = as.numeric(quantile(return$AAL, alpha))
+VAR_aal = -S0 * q_aal
+#VAR_aal
+
+### DAL
+q_dal = as.numeric(quantile(return$DAL, alpha))
+VAR_dal = -S0 * q_dal
+#VAR_dal
+
+### BAC
+q_bac = as.numeric(quantile(return$BAC, alpha))
+VAR_bac = -S0 * q_bac
+#VAR_bac
+
+### NVDA
+q_nvda = as.numeric(quantile(return$NVDA, alpha))
+VAR_nvda = -S0 * q_nvda
+#VAR_nvda
+
+### WBD
+q_wbd = as.numeric(quantile(return$WBD, alpha))
+VAR_wbd = -S0 * q_wbd
+#VAR_wbd
+
+VAR_asset <- c(VAR_msft, VAR_tsla, VAR_aapl, VAR_twtr, VAR_amzn, VAR_fb, VAR_nflx,
+               VAR_aal, VAR_dal, VAR_bac, VAR_nvda, VAR_wbd)
+cbind(names, VAR_asset)
+```
+
+```{r}
+data(SP500, package="Ecdat")
+n=2783
+SPreturn = SP500$r500[(n - 999):n]
+year = 1981 + (1:n) * (1991.25 - 1981) / n
+year = year[(n - 999):n]
+alpha = 0.05
+q = as.numeric(quantile(SPreturn, alpha))
+VaR_nonp = -20000 * q
+IEVaR = (SPreturn < q)
+sum(IEVaR)
+ES_nonp = -20000 * sum(SPreturn * IEVaR) / sum(IEVaR)
+options(digits = 5)
+VaR_nonp
+ES_nonp
+```
+
+
+#### Assets' Sharpe's Ratios
+```{r}
+names_sh <- data.frame(colnames(return[1,2:14]))
+sharpes_list <- rep(NA, 13)
+for(i in 2:14){
+  sharpes_list[i-1] = (mean(unlist(return[,i]))-mean(unlist(return[,15]))/100)/sd(unlist(return[,i]))
+}
+sharpes_list <- data.frame(sharpes_list)
+shar_df <- cbind(names_sh,sharpes_list)
+shar_df
+```
+
+### Without shortshale
+```{r}
+### Without shortsale
+#R = 100*return[,2:13]
+#mean_p <- apply(R,2,mean)
+#cov_p <- cov(R)
+#sd_vect_p <- sqrt(diag(cov_p))
+### With shortsale
+#M_p = length(mean_p)
+Amat_p_noss <- cbind(rep(1,M_p),mean_p, diag(1,nrow=M_p))
+mu_P_noss = seq(min(mean_p)+0.0001, max(mean_p)-0.0001, length = 300)
+# Target portfolio means for the expect portfolio return
+sd_P_noss = mu_P_noss # set up storage for std dev's of portfolio returns
+weights_p_noss = matrix(0, nrow = 300, ncol = M_p) # storage for return
+for (i in 1:length(mu_P_noss)) { # find the optimal portfolios
+  bvec_p_noss <- c(1, mu_P_noss[i], rep(0,M_p))
+  result_noss = solve.QP(Dmat = 2 * cov_p, dvec = rep(0, M_p), Amat = Amat_p_noss, 
+                    bvec = bvec_p_noss, meq = 2)
+  sd_P_noss[i] = sqrt(result_noss$value)
+  weights_p_noss[i, ] = result_noss$solution
+}
+plot(sd_P_noss, mu_P_noss, type = "l", lty = 3, 
+     lwd = 2, xlim = c(0,15), ylim = c(0,7)) 
+# plot efficient frontier (and inefficient portfolios below the min var portfolio)
+#mufree_p = mean(return$`Treasury Bill 3 month (rf)`) # input value of risk-free interest rate
+points(0, mufree_p, cex = 4, pch = "*") # show risk-free asset
+sharpe_p_noss = (mu_P_noss - mufree_p) / sd_P_noss # compute Sharpes ratios
+ind_p_noss = (sharpe_p_noss == max(sharpe_p_noss)) # Find maximum Sharpes ratio
+#weights_p[ind_p,] # print the weights of the tangency portfolio
+lines(c(0, 15), mufree_p + c(0, 15) * (mu_P_noss[ind_p_noss] - mufree_p) / sd_P_noss[ind_p_noss], lwd = 4, 
+      lty = 1, col = "blue") # show line of optimal portfolios
+points(sd_P_noss[ind_p_noss], mu_P_noss[ind_p_noss], cex = 4, pch = "*") # tangency portfolio
+ind2_p_noss = (sd_P_noss == min(sd_P_noss)) # find the minimum variance portfolio
+points(sd_P_noss[ind2_p_noss], mu_P_noss[ind2_p_noss], cex = 2, pch = "+") # min var portfolio
+ind3_p_noss = (mu_P_noss > mu_P_noss[ind2_p_noss])
+lines(sd_P_noss[ind3_p_noss], mu_P_noss[ind3_p_noss], type = "l",
+      lwd = 3, col = 'red') # plot the efficient frontier
+for(i in 1:12){
+  text(sd_vect_p[i], mean_p[i],colnames(return[,i+1]), cex=0.8)
+}
+
+### MVP
+(mvp_meanreturn_noss <- mu_P_noss[ind2_p_noss])
+(mvp_sd_noss <- sd_P_noss[ind2_p_noss])
+weights_mvp_noss <- weights_p_noss[ind2_p_noss,]
+weights_mvp_noss <- t(data.frame(weights_mvp_noss))
+colnames(weights_mvp_noss) <- colnames(return[2:13])
+weights_mvp_noss
+(mvp_meanreturn_ann_noss <- mvp_meanreturn_noss*12)
+(mvp_sd_ann_noss <- mvp_sd_noss*sqrt(12))
+
+### Efficient Portfolio Frontier
+EPF_mean_noss <- mu_P_noss[ind3_p_noss]
+EPF_sd_noss <- sd_P_noss[ind3_p_noss]
+
+### Tangency Portfolio
+(tan_meanreturn_noss <- mu_P_noss[ind_p_noss])
+(tan_sd_noss <- sd_P_noss[ind_p_noss])
+(tan_var_noss <- tan_sd_noss^2)
+(tan_sharpes_noss <- (tan_meanreturn_noss-mufree_p)/tan_sd_noss)
+```
+
+
 
 
 
