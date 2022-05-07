@@ -1,0 +1,294 @@
+---
+title: "5261project"
+author: "Jiayi Yuan"
+date: '2022-04-20'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Descriptive Statistics
+```{r}
+library(readxl)
+library(moments)
+library(reshape)
+library(corrgram)
+library(tidyr)
+library(tseries)
+library(fGarch)
+asset <- read_xlsx("12Assetdata.xlsx", sheet = "Price")
+return <- read_xlsx("12Assetdata.xlsx", sheet = "Return")
+asset[,-1] <- round(asset[,-1], 4)
+asset$Date <- as.Date(asset$Date)
+return$Date <- as.Date(return$Date)
+```
+
+### Means SDs Skewness  Kurtosis Betas
+```{r}
+
+means <- sapply(asset[,2:14], mean)
+means
+means_r <- sapply(return[,2:14], mean)
+means_r
+
+### SDs
+sds <- sapply(asset[,2:14], sd)
+sds
+sds_r <- sapply(return[,2:14], sd)
+sds_r
+
+### Skewness
+skews <- sapply(asset[,2:14], skewness)
+skews
+skews_r <- sapply(return[,2:14], skewness)
+skews_r
+
+### Kurtosis
+kurtosis <- sapply(asset[,2:14], kurtosis)
+kurtosis
+kurtosis_r <- sapply(return[,2:14], kurtosis)
+kurtosis_r
+
+### Betas
+betas <- list()
+for (i in 2:13){
+  betas[i-1] <- lm(unlist(return[,i])-return$`Treasury Bill 3 month (rf)`~
+                 return$`S&P500`- return$`Treasury Bill 3 month (rf)`)$coefficients[2]
+}
+names <- colnames(asset)[2:13]
+rbind(names, unlist(betas))
+
+```
+
+### Plots
+```{r}
+### Plots
+asset_l <- asset[,1:14] %>%
+  pivot_longer(!Date,  names_to = "Asset", values_to = "Price")
+return_l <- return[,1:14] %>%
+  pivot_longer(!Date,  names_to = "Asset", values_to = "Return")
+plot(asset$Date, asset$MSFT, type = "l", col = 2, ylim = c(0, 800))
+for (i in 3:14) {
+  lines(asset$Date, unlist(asset[, i]), type = "l", col = i)
+}
+legend("topleft", names,lty = 1, col = 2:14)
+plot(asset$Date, asset$AMZN, type = "l")
+```
+
+### Equity curve
+```{r}
+### Equity curve
+par(mfrow = c(2,3))
+for (i in 2:14) {
+  plot(return$Date, unlist(return[, i]), type = "l",
+       ylab = colnames(return[, i]), xlab = "Date")
+}
+```
+
+### Stationary Test
+```{r}
+### Stationary Test
+par(mfrow = c(2,4))
+for(i in 2:14){
+  acf(unlist(return[,i]),lag.max = length(return$MSFT),
+         xlab = "lag #", ylab = 'ACF', main=' ')
+}
+```
+
+### Hist, Boxplot, qqplot
+```{r}
+### Hist, Boxplot, qqplot
+par(mfrow = c(3,3))
+for(i in 2:14){
+  hist(unlist(return[,i]), freq = FALSE,
+       main = colnames(return)[i], xlab = "Return")
+  lines(density(unlist(return[,i])))
+  boxplot(unlist(return[,i]), main = colnames(return)[i])
+  qqnorm(unlist(return[,i]), pch = 1, main = colnames(return)[i])
+  qqline(unlist(return[,i]), lwd = 2)
+}
+```
+
+### Distributions
+```{r warning=FALSE}
+#### t
+namesd <- data.frame(colnames(asset[1,2:13]))
+tdis <- rep(NA, 12)
+normal <- rep(NA, 12)
+ged <- rep(NA, 12)
+
+tdis_fun <- function(return) {
+  start = c(mean(return), sd(return), 5)
+  loglik_t = function(beta)
+    sum(-dt((return - beta[1]) / beta[2],
+            beta[3], log = TRUE) + log(beta[2]))
+  fit_t = optim(
+    start,
+    loglik_t,
+    hessian = T,
+    method = "L-BFGS-B",
+    lower = c(-1, 0.001, 1)
+  )
+  AIC_t = 2 * fit_t$value + 2 * 3
+  #return(AIC_t)
+  return(fit_t$value)
+}
+
+for (i in 2:13){
+  tdis[i-1] <- lapply(return[,i], tdis_fun)
+}
+tdis <- data.frame(unlist(tdis))
+
+#### normal
+ndis_fun <- function(return) {
+  AIC_n <- 2 * snormFit(return, hessian = TRUE)$objective + 2 * 3
+  AIC_n
+}
+for(i in 2:13){
+  normal[i-1] <- lapply(return[,i], ndis_fun)
+}
+normal <- data.frame(unlist(normal))
+
+#### ged
+ged_fun <- function(return) {
+  AIC_ged <- 2 * gedFit(return, hessian = TRUE)$objective + 2 * 3
+  AIC_ged
+}
+for(i in 2:13){
+  ged[i-1] <- lapply(return[,i], ged_fun)
+}
+ged <- data.frame(unlist(ged)) 
+
+dis_df <- cbind(namesd,tdis,normal,ged)
+dis_df
+```
+
+### Sharpe's Ratio
+```{r}
+
+sharpes <- data.frame(matrix(ncol=13, nrow = 98))
+colnames(sharpes) <- colnames(return[1,2:14])
+
+for(i in 2:14){
+  sharpes[,i-1] = (unlist(return[,i])-unlist(return[,15])/100)/sds_r[i-1]
+}
+max(sharpes[,1])
+
+names_sh <- data.frame(colnames(return[1,2:14]))
+sharpes_list <- rep(NA, 13)
+for(i in 2:14){
+  sharpes_list[i-1] = (mean(unlist(return[,i]))-mean(unlist(return[,15]))/100)/sd(unlist(return[,i]))
+}
+sharpes_list <- data.frame(sharpes_list)
+shar_df <- cbind(names_sh,sharpes_list)
+shar_df
+
+
+
+(unlist(return[,2])-unlist(return[,15])/100)/sds_r[1]
+
+(return$MSFT-return$`Treasury Bill 3 month (rf)`/100)/sds_r[13]
+sds[1]
+
+
+```
+
+### M to Y
+```{r}
+means_y <- means_r*12
+means_y
+
+### SDs
+sds_y <- means_r*sqrt(12)
+sds_y
+```
+
+### Pairewise
+```{r fig.width=15}
+pairs(return[,2:14],pch = 19)
+```
+
+### Covariance Matrix
+```{r}
+cov_mat <- cov(return[,2:14])
+cov_mat
+```
+
+## Portfolio Theory
+### MVP
+```{r}
+mean_p <- sapply(return[2:13], mean)
+sd_p <- sapply(return[2:13], sd)
+cov_p <- cov(return[2:13])
+### With shortsale
+M_p = length(mean_p)
+Amat_p <- cbind(rep(1,M_p), mean_p, diag(1,M_p), -diag(1,M_p))
+mu_P = seq(min(mean_p)+0.0001, max(mean_p)-0.0001, length = 300)
+# Target portfolio means for the expect portfolio return
+sd_P = mu_P # set up storage for std dev's of portfolio returns
+weights_p = matrix(0, nrow = 300, ncol = M_p) # storage for return
+for (i in 1:length(mu_P)) { # find the optimal portfolios
+  bvec_p <- c(1, mu_P[i], rep(-0.1, M_p), rep(-0.5, M_p))
+  result = solve.QP(Dmat = 2 * cov_p, dvec = rep(0, M_p), Amat = Amat_p, 
+                    bvec = bvec_p, meq = 2)
+  sd_P[i] = sqrt(result$value)
+  weights_p[i, ] = result$solution
+}
+plot(sd_P, mu_P, type = "l", xlim = c(0, 0.2), ylim = c(0, 0.08), lty = 3, 
+     lwd = 2) 
+# plot efficient frontier (and inefficient portfolios below the min var portfolio)
+mufree_p = mean(return$`Treasury Bill 3 month (rf)`)/100
+points(0, mufree, cex = 4, pch = "*")
+
+
+
+M = length(mean_vect)
+Amat <- cbind(rep(1,M), mean_vect, diag(1, M), -diag(1, M))
+muP = seq(min(mean_vect)+0.0001, max(mean_vect)-0.0001, length = 300) 
+# Target portfolio means for the expect portfolio return
+sdP = muP # set up storage for std dev's of portfolio returns
+weights = matrix(0, nrow = 300, ncol = M) # storage for return
+for (i in 1:length(muP)) { # find the optimal portfolios
+  bvec <- c(1, muP[i], rep(-0.1, M), rep(-0.5, M))
+  result = solve.QP(Dmat = 2 * cov_mat, dvec = rep(0, M), Amat = Amat, 
+                    bvec = bvec, meq = 2)
+  sd_P[i] = sqrt(result$value)
+  weights[i, ] = result$solution
+}
+plot(sdP, muP, type = "l", xlim = c(0, 1), ylim = c(0, 0.05), lty = 3, 
+     lwd = 2) 
+# plot efficient frontier (and inefficient portfolios below the min var portfolio)
+mufree = 3 / 365 # input value of risk-free interest rate
+points(0, mufree, cex = 4, pch = "*") # show risk-free asset
+sharpe = (muP - mufree) / sdP # compute Sharpes ratios
+ind = (sharpe == max(sharpe)) # Find maximum Sharpes ratio
+(w_tan <- weights[ind, ]) # print the weights of the tangency portfolio
+lines(c(0, 2), mufree + c(0, 2) * (muP[ind] - mufree) / sdP[ind], lwd = 4, 
+      lty = 1, col = "blue") # show line of optimal portfolios
+points(sdP[ind], muP[ind], cex = 4, pch = "*") # tangency portfolio
+ind2 = (sdP == min(sdP)) # find the minimum variance portfolio
+points(sdP[ind2], muP[ind2], cex = 2, pch = "+") # min var portfolio
+ind3 = (muP > muP[ind2])
+lines(sdP[ind3], muP[ind3], type = "l", xlim = c(0, 0.25), ylim = c(0, 0.3),
+      lwd = 3, col = 'red') # plot the efficient frontier
+text(sd_vect[1], mean_vect[1], 'GE', cex = 1)
+text(sd_vect[2], mean_vect[2], 'F', cex = 1)
+text(sd_vect[3], mean_vect[3], 'CAT', cex = 1)
+text(sd_vect[4], mean_vect[4], 'UTX', cex = 1)
+text(sd_vect[5], mean_vect[5], 'MRK', cex = 1)
+text(sd_vect[6], mean_vect[6], 'IBM', cex=1)
+```
+
+
+
+
+
+
+
+
+
+
+
+
