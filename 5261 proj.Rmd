@@ -27,7 +27,6 @@ return$Date <- as.Date(return$Date)
 
 ### Means SDs Skewness  Kurtosis Betas
 ```{r}
-
 means <- sapply(asset[,2:14], mean)
 means
 means_r <- sapply(return[,2:14], mean)
@@ -111,7 +110,7 @@ for(i in 2:14){
 ```
 
 ### Hist, Boxplot, qqplot
-```{r}
+```{r fig.width=10, fig.height=10}
 ### Hist, Boxplot, qqplot
 par(mfrow = c(3,3))
 for(i in 2:14){
@@ -180,13 +179,13 @@ dis_df
 
 ### Sharpe's Slope ??
 ```{r}
-sharpes <- data.frame(matrix(ncol=13, nrow = 98))
-colnames(sharpes) <- colnames(return[1,2:14])
-
-for(i in 2:14){
-  sharpes[,i-1] = (unlist(return[,i])-unlist(return[,15])/100)/sds_r[i-1]
-}
-max(sharpes[,1])
+# sharpes <- data.frame(matrix(ncol=13, nrow = 98))
+# colnames(sharpes) <- colnames(return[1,2:14])
+# 
+# for(i in 2:14){
+#   sharpes[,i-1] = (unlist(return[,i])-unlist(return[,15])/100)/sds_r[i-1]
+# }
+# max(sharpes[,1])
 
 names_sh <- data.frame(colnames(return[1,2:14]))
 sharpes_list <- rep(NA, 13)
@@ -197,12 +196,10 @@ sharpes_list <- data.frame(sharpes_list)
 shar_df <- cbind(names_sh,sharpes_list)
 shar_df
 
-
-
-(unlist(return[,2])-unlist(return[,15])/100)/sds_r[1]
-
-(return$MSFT-return$`Treasury Bill 3 month (rf)`/100)/sds_r[13]
-sds[1]
+# (unlist(return[,2])-unlist(return[,15])/100)/sds_r[1]
+# 
+# (return$MSFT-return$`Treasury Bill 3 month (rf)`/100)/sds_r[13]
+# sds[1]
 ```
 
 ### M to Y
@@ -216,7 +213,7 @@ sds_y
 ```
 
 ### Pairewise
-```{r fig.width=15}
+```{r fig.width=15, fig.height=15}
 pairs(return[,2:14],pch = 19)
 ```
 
@@ -250,7 +247,7 @@ for (i in 1:length(mu_P)) { # find the optimal portfolios
   sd_P[i] = sqrt(result_p$value)
   weights_p[i, ] = result_p$solution
 }
-plot(sd_P, mu_P, type = "l", xlim = c(0,15), ylim = c(0, 6), lty = 3) 
+plot(sd_P, mu_P, type = "l", xlim = c(0,15), ylim = c(0, 6), lty = 3, lwd = 2) 
 # plot efficient frontier (and inefficient portfolios below the min var portfolio)
 mufree_p = mean(return$`Treasury Bill 3 month (rf)`)# input value of risk-free interest rate
 points(0, mufree_p, cex = 4, pch = "*") # show risk-free asset
@@ -407,24 +404,6 @@ VAR_asset <- c(VAR_msft, VAR_tsla, VAR_aapl, VAR_twtr, VAR_amzn, VAR_fb, VAR_nfl
                VAR_aal, VAR_dal, VAR_bac, VAR_nvda, VAR_wbd)
 cbind(names, VAR_asset)
 ```
-
-```{r}
-data(SP500, package="Ecdat")
-n=2783
-SPreturn = SP500$r500[(n - 999):n]
-year = 1981 + (1:n) * (1991.25 - 1981) / n
-year = year[(n - 999):n]
-alpha = 0.05
-q = as.numeric(quantile(SPreturn, alpha))
-VaR_nonp = -20000 * q
-IEVaR = (SPreturn < q)
-sum(IEVaR)
-ES_nonp = -20000 * sum(SPreturn * IEVaR) / sum(IEVaR)
-options(digits = 5)
-VaR_nonp
-ES_nonp
-```
-
 
 #### Assets' Sharpe's Ratios
 ```{r}
