@@ -62,40 +62,27 @@ rbind(names, unlist(betas))
 
 ### Plots
 ```{r}
-library(ggplot2)
-### Plots
-# asset_l <- asset[,1:14] %>%
-#   pivot_longer(!Date,  names_to = "Asset", values_to = "Price")
-# return_l <- return[,1:14] %>%
-#   pivot_longer(!Date,  names_to = "Asset", values_to = "Return")
-# 
-# ggplot(return_l, aes(x = Date, y = Return, col = Asset)) +
-#   geom_line()
-
 par(mfrow = c(3,3))
 ### Price
 for(i in 2:13){
   plot(asset$Date, unlist(asset[,i]), type = "l", col = i, 
        main = paste(colnames(asset[,i])," price"))
-  abline(h=0)
 }
 
-### Return
-# for(i in 2:13){
-#   plot(return$Date, unlist(return[,i]), type = "l", col = i, 
-#        main = paste(colnames(return[,i])," return"))
-#   abline(h=0)
-# }
+## Return
+for(i in 2:13){
+  plot(return$Date, unlist(return[,i]), type = "l", col = i,
+       main = paste(colnames(return[,i])," return"))
+  abline(h=0)
+}
 ```
 
-### Equity curve ??
-```{r}
 ### Equity curve
+```{r}
 par(mfrow = c(3,3))
-for (i in 2:14) {
-  plot(return$Date, unlist(return[, i]), type = "l",
-       ylab = "Return", xlab = "Date", main = colnames(return[, i]))
-  abline(h=0)
+for(i in 2:13){
+  plot(x = unlist(return$Date),y = unlist(cumsum(return[,i])), type="l", 
+       main = colnames(return[,i]), xlab = "Date", ylab = "Return") 
 }
 ```
 
@@ -186,7 +173,6 @@ dis_df
 #   sharpes[,i-1] = (unlist(return[,i])-unlist(return[,15])/100)/sds_r[i-1]
 # }
 # max(sharpes[,1])
-
 names_sh <- data.frame(colnames(return[1,2:14]))
 sharpes_list <- rep(NA, 13)
 for(i in 2:14){
@@ -195,11 +181,6 @@ for(i in 2:14){
 sharpes_list <- data.frame(sharpes_list)
 shar_df <- cbind(names_sh,sharpes_list)
 shar_df
-
-# (unlist(return[,2])-unlist(return[,15])/100)/sds_r[1]
-# 
-# (return$MSFT-return$`Treasury Bill 3 month (rf)`/100)/sds_r[13]
-# sds[1]
 ```
 
 ### M to Y
