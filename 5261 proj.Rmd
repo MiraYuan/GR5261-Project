@@ -701,6 +701,157 @@ faa1 = factanal(df,factor=3,rotation = "varimax")
 faa1
 ```
 
+## 6.Risk Management
+```{r}
+Return <- return
+Price <- asset
+n = nrow(Return)
+alpha = 0.05
+# Non-paramatric
+
+VaR_non = c()
+ES_non = c()
+for (i in 2:13) {
+  q = as.numeric(quantile(unlist(Return[,i]), alpha)) #-0.06918179
+  VaR_nonp = -100000 * q
+  IEVaR = (Return[,i] < q)
+  ES_nonp = -100000 * sum(Return[,i] * IEVaR) / sum(IEVaR)
+  options(digits = 5)
+  VaR_non = c(VaR_non, VaR_nonp)
+  ES_non = c(ES_non, ES_nonp)
+}
+VaR_non
+ES_non
+
+# Parametric - normal dist
+
+# m = mean(Return$MSFT)
+# sd = sd(Return$MSFT)
+# qalpha = qnorm(alpha)
+# VaR_par = -100000 * (m + sd * qalpha)
+# ES = 100000 * (-m + sd * (dnorm(qalpha))/alpha)
+
+VaR = c()
+ES = c()
+for (i in 2:13) {
+  m = mean(unlist(Return[,i]))
+  sd = sd(unlist(Return[,i]))
+  qalpha = qnorm(alpha)
+  VaR_par = -100000 * (m + sd * qalpha)
+  ES_par = 100000 * (-m + sd * (dnorm(qalpha))/alpha)
+  VaR = c(VaR, VaR_par)
+  ES = c(ES, ES_par)
+}
+VaR
+ES
+```
+
+### Bootstrap
+```{r}
+library(bootstrap)
+b=1000; n=400; S0=100000; var.boot=rep(0,b); es.boot=rep(0,b)
+
+#non-parametric bootstrapping VaR
+CI_nonp = c()
+ES_nonp = c()
+for (k in 2:13){
+  for (i in 1:b){
+    data.boot=sample(unlist(Return[,k]),n, replace=TRUE)
+    var.boot[i]= -S0 * q
+    #ES
+    q = as.numeric(quantile(data.boot, 0.05))
+    IEVaR = (data.boot < q)
+    es.boot[i]  = -100000 * sum(data.boot * IEVaR) / sum(IEVaR)
+    options(digits = 5)
+    }
+    CI_nonp = rbind(CI_nonp, c(quantile(var.boot, 0.025), quantile(var.boot, 0.975)))
+    ES_nonp = rbind(ES_nonp, c(quantile(es.boot, 0.025), quantile(es.boot, 0.975)))
+}
+
+CI_nonp
+ES_nonp
+
+
+#parametric
+CI_p = c()
+ES_p = c()
+for (k in 2:13){
+  for (i in 1:b){
+    data.boot=sample(unlist(Return[,k]),n, replace=TRUE)
+    var.boot[i]= -S0*(mean(data.boot)+qnorm(0.05)*sd(data.boot))
+    #ES
+    s = sd(data.boot)*sqrt((1000-1)/1000)
+    m = mean(data.boot)
+    es.boot[i] = 100000 * (-m + s * (dnorm(qalpha))/alpha)
+    }
+    sd = sd(var.boot)*sqrt((1000-1)/1000)
+    mean = mean(var.boot)
+    CI_p = rbind(CI_p, c(mean + sd*qnorm(0.025), mean + sd*qnorm(0.975)))
+    ES_p = rbind(ES_p, c(quantile(es.boot, 0.025), quantile(es.boot, 0.975)))
+}
+CI_p
+ES_p
+```
+
+## 7.Copulas
+```{r warning=FALSE}
+library(copula)
+
+#12 assets
+est.df = data.frame()
+i = 2
+while (i <= 13) {
+  est = as.numeric( fitdistr(unlist(Return[,i]),"t")$estimate )
+  est[2] = est[2] * sqrt( est[3] / (est[3]-2) )
+  est.row = c(est[1], est[2], est[3])
+  est.df = rbind(est.df, est.row)
+   i = i + 1
+}
+colnames(est.df) = c('m', 'sd', 'df')
+# est.df: dataframe for estimations
+est.df
+
+data1 = cbind(rank(Return$MSFT)/(n+1), rank(Return$TSLA)/(n+1), rank(Return$AAPL)/(n+1), rank(Return$TWTR)/(n+1), rank(Return$AMZN)/(n+1), rank(Return$FB)/(n+1), rank(Return$NFLX)/(n+1), rank(Return$AAL)/(n+1), rank(Return$DAL)/(n+1), rank(Return$BAC)/(n+1), rank(Return$NVDA)/(n+1), rank(Return$WBD)/(n+1))
+
+#fit t copula
+cop_t_dim12 = tCopula(dim = 12, dispstr = "un", df=n-1)
+ft1 = fitCopula(data = data1, copula = cop_t_dim12, method="ml")
+ft1@estimate
+ft1@loglik
+AIC(ft1)
+
+# fit gaussian copula
+fnorm = fitCopula(data = data1, copula = normalCopula(dim=12), method="ml")
+fnorm@estimate
+fnorm@loglik
+AIC(fnorm)
+
+# frank
+ffrank = fitCopula(copula = frankCopula(3, dim = 12), data = data1, method="ml")
+ffrank@estimate
+ffrank@loglik
+AIC(ffrank)
+
+# clayton
+fclayton = fitCopula(copula = claytonCopula(3, dim = 12), data = data1, method="ml")
+fclayton@estimate
+fclayton@loglik
+AIC(fclayton)
+
+# gumbel
+fgumbel = fitCopula(copula = gumbelCopula(3, dim = 12), data = data1, method="ml")
+fgumbel@estimate
+fgumbel@loglik
+AIC(fgumbel)
+
+# joe
+fjoe = fitCopula(copula = joeCopula(2, dim = 12), data = data1, method="ml")
+fjoe@estimate
+fjoe@loglik
+AIC(fjoe)
+```
+
+
 
 
 
