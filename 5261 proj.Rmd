@@ -1,16 +1,16 @@
 ---
 title: "5261project"
-author: "Jiayi Yuan"
+author: "Jiayi Yuan, Wenhao Wang, Xinyu Xiong"
 date: '2022-04-20'
-output: pdf_document
+output: html_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Descriptive Statistics
-```{r}
+## 2. Descriptive Statistics
+```{r, include=FALSE}
 library(readxl)
 library(moments)
 library(reshape)
@@ -18,6 +18,20 @@ library(corrgram)
 library(tidyr)
 library(tseries)
 library(fGarch)
+library(moments)
+library(parcoords)
+library(ggfortify)
+library(caTools)
+library(nnet)
+library(pls)
+library(xts)
+library(zoo)
+#install.packages("IntroCompFinR", repos="http://R-Forge.R-project.org")
+library(IntroCompFinR)
+library(PerformanceAnalytics)
+library(quantmod)
+library(TTR)
+library(psych)
 asset <- read_xlsx("12Assetdata.xlsx", sheet = "Price")
 return <- read_xlsx("12Assetdata.xlsx", sheet = "Return")
 asset[,-1] <- round(asset[,-1], 4)
@@ -26,92 +40,113 @@ return$Date <- as.Date(return$Date)
 ```
 
 ### Means SDs Skewness  Kurtosis Betas
-```{r}
+```{r fig.width=10,fig.height=10, warning=FALSE, echo=FALSE}
 means <- sapply(asset[,2:14], mean)
-means
-means_r <- sapply(return[,2:14], mean)
-means_r
+#means
+means_r <- sapply(return[,2:14]*100, mean)
+#means_r
 
 ### SDs
 sds <- sapply(asset[,2:14], sd)
-sds
-sds_r <- sapply(return[,2:14], sd)
-sds_r
+#sds
+sds_r <- sapply(return[,2:14]*100, sd)
+#sds_r
 
 ### Skewness
 skews <- sapply(asset[,2:14], skewness)
-skews
-skews_r <- sapply(return[,2:14], skewness)
-skews_r
+#skews
+skews_r <- sapply(return[,2:14]*100, skewness)
+#skews_r
 
 ### Kurtosis
 kurtosis <- sapply(asset[,2:14], kurtosis)
-kurtosis
-kurtosis_r <- sapply(return[,2:14], kurtosis)
-kurtosis_r
+#kurtosis
+kurtosis_r <- sapply(return[,2:14]*100, kurtosis)
+#kurtosis_r
 
 ### Betas
 betas <- list()
 for (i in 2:13){
-  betas[i-1] <- lm(unlist(return[,i])-return$`Treasury Bill 3 month (rf)`~
-                 return$`S&P500`- return$`Treasury Bill 3 month (rf)`)$coefficients[2]
+  betas[i-1] <- lm(unlist(return[,i]*100)-return$`Treasury Bill 3 month (rf)`~
+                 unlist(return[,14]*100)- return$`Treasury Bill 3 month (rf)`)$coefficients[2]
 }
+#betas
 names <- colnames(asset)[2:13]
-rbind(names, unlist(betas))
+beta <- rbind(names, unlist(betas))
+#beta
+stat_df <- data.frame(rbind(means,means_r,sds,sds_r,skews,skews_r,kurtosis,kurtosis_r,unlist(betas)))
+rownames(stat_df) <- c("Mean (price)", "Mean(return %)","SD (price)","SD(return %)","Skewness (price)",
+                       "Skewness (return %)","Kurtosis (price)","Kurtosis (return %)","Beta")
+stat_df[9,13] <- 1
+knitr::kable(round(t(stat_df),3))
 ```
 
 ### Plots
-```{r}
+```{r, echo=FALSE}
 par(mfrow = c(3,3))
 ### Price
-for(i in 2:13){
-  plot(asset$Date, unlist(asset[,i]), type = "l", col = i, 
-       main = paste(colnames(asset[,i])," price"))
+for(i in 2:14){
+  plot(asset$Date, unlist(asset[,i]), type = "l", col = "black", 
+       main = paste(colnames(asset[,i])," price"), ylab = "Price", xlab = "Year")
+  #lines(asset$Date, asset$`S&P500`, col = "black")
 }
 
 ## Return
-for(i in 2:13){
-  plot(return$Date, unlist(return[,i]), type = "l", col = i,
-       main = paste(colnames(return[,i])," return"))
+for(i in 2:14){
+  plot(return$Date, unlist(return[,i]*100), type = "l", col = "black",
+       main = paste(colnames(return[,i])," return"), ylab = "Return(%)", xlab = ("Year"))
   abline(h=0)
 }
 ```
 
 ### Equity curve
-```{r}
+```{r, echo=FALSE}
 par(mfrow = c(3,3))
 for(i in 2:13){
-  plot(x = unlist(return$Date),y = unlist(cumsum(return[,i])), type="l", 
-       main = colnames(return[,i]), xlab = "Date", ylab = "Return") 
+  plot(x = unlist(return$Date),y = unlist(cumsum(return[,i]*100)), type="l", 
+       main = colnames(return[,i]), xlab = "Date", ylab = "Return(%)", col = "dark red") 
+  lines(return$Date, cumsum((return$`S&P500`)*100), col = "black")
 }
 ```
 
 ### Stationary Test
-```{r}
+```{r warning=FALSE, echo=FALSE}
 ### Stationary Test
-par(mfrow = c(2,4))
-for(i in 2:14){
-  acf(unlist(return[,i]),lag.max = length(return$MSFT),
-         xlab = "lag #", ylab = 'ACF', main=' ')
-}
-```
-
-### Hist, Boxplot, qqplot
-```{r fig.width=10, fig.height=10}
-### Hist, Boxplot, qqplot
 par(mfrow = c(3,3))
-for(i in 2:14){
-  hist(unlist(return[,i]), freq = FALSE,
-       main = colnames(return)[i], xlab = "Return")
-  lines(density(unlist(return[,i])))
-  boxplot(unlist(return[,i]), main = colnames(return)[i])
-  qqnorm(unlist(return[,i]), pch = 1, main = colnames(return)[i])
-  qqline(unlist(return[,i]), lwd = 2)
+for(i in 2:13){
+  acf(unlist(return[,i]),lag.max = length(return$MSFT),
+         xlab = "", ylab = 'ACF', main = colnames(return[,i]))
 }
+return_ts <- as.ts(return) 
+station <- list(rep(NA,13 ))
+for(i in 2:14){
+  station[i-1] <- kpss.test(return_ts[,i], null = "Trend")$p.value
+}
+#aa<-kpss.test(return_ts[,2], null = "Trend")
+#aa$p.value
+knitr::kable(cbind(colnames(return[,2:14]),unlist(station)))
+```
+
+### Hist, Boxplot, qqplot
+```{r echo=FALSE}
+### Hist, Boxplot, qqplot
+par(mfrow = c(2,2))
+for(i in 2:14){
+  hist(unlist(return[,i]*100), freq = FALSE,
+       main = colnames(return[,i]), xlab = "Return(%)")
+  lines(density(unlist(return[,i]*100)))
+}
+par(mfrow = c(2,2))
+for(i in 2:14){
+  qqnorm(unlist(return[,i]*100), pch = 1, main = colnames(return[,i]))
+  qqline(unlist(return[,i]*100), lwd = 2)
+}
+par(mfrow = c(1,1))
+boxplot(return[,2:14],las=2)
 ```
 
 ### Distributions
-```{r warning=FALSE}
+```{r warning=FALSE, echo=FALSE}
 #### t
 namesd <- data.frame(colnames(asset[1,2:13]))
 tdis <- rep(NA, 12)
@@ -161,11 +196,12 @@ for(i in 2:13){
 ged <- data.frame(unlist(ged)) 
 
 dis_df <- cbind(namesd,tdis,normal,ged)
-dis_df
+colnames(dis_df) <- c("Asset","t-distribution","Normal Distribution", "GED")
+knitr::kable(dis_df)
 ```
 
-### Sharpe's Slope ??
-```{r}
+### Sharpe's Slope 
+```{r echo=FALSE}
 # sharpes <- data.frame(matrix(ncol=13, nrow = 98))
 # colnames(sharpes) <- colnames(return[1,2:14])
 # 
@@ -173,38 +209,43 @@ dis_df
 #   sharpes[,i-1] = (unlist(return[,i])-unlist(return[,15])/100)/sds_r[i-1]
 # }
 # max(sharpes[,1])
-names_sh <- data.frame(colnames(return[1,2:14]))
-sharpes_list <- rep(NA, 13)
-for(i in 2:14){
-  sharpes_list[i-1] = (mean(unlist(return[,i]))-mean(unlist(return[,15]))/100)/sd(unlist(return[,i]))
+names_sh <- data.frame(colnames(return[1,2:13]))
+sharpes_list <- rep(NA, 12)
+for(i in 2:13){
+  sharpes_list[i-1] = (mean(unlist(return[,i]*100))-mean(unlist(return[,15])))/sd(unlist(return[,i]*100))
 }
 sharpes_list <- data.frame(sharpes_list)
 shar_df <- cbind(names_sh,sharpes_list)
-shar_df
+colnames(shar_df) <- c("Assets","Sharpe's Slope")
+knitr::kable(shar_df)
 ```
 
 ### M to Y
-```{r}
+```{r echo=FALSE}
 means_y <- means_r*12
-means_y
+#means_y
 
 ### SDs
-sds_y <- means_r*sqrt(12)
-sds_y
+sds_y <- sds_r*sqrt(12)
+#sds_y
+
+ann_df <- cbind(means_r,sds_r,means_y,sds_y)
+colnames(ann_df) <- c("Monthly Mean","Monthly SD", "Annual Mean", "Annual SD")
+knitr::kable(ann_df)
 ```
 
 ### Pairewise
-```{r fig.width=15, fig.height=15}
+```{r fig.width=15, fig.height=15, echo=FALSE}
 pairs(return[,2:14],pch = 19)
 ```
 
 ### Covariance Matrix
-```{r}
+```{r echo=FALSE}
 cov_mat <- cov(return[,2:14])
-cov_mat
+knitr::kable(round(cov_mat,4))
 ```
 
-## Portfolio Theory
+## 3. Portfolio Theory
 ### With Short Sale
 ```{r}
 library(quadprog)
@@ -228,7 +269,7 @@ for (i in 1:length(mu_P)) { # find the optimal portfolios
   sd_P[i] = sqrt(result_p$value)
   weights_p[i, ] = result_p$solution
 }
-plot(sd_P, mu_P, type = "l", xlim = c(0,15), ylim = c(0, 6), lty = 3, lwd = 2) 
+plot(sd_P, mu_P, type = "l", xlim = c(0,15), ylim = c(0, 6), lty = 3, lwd = 2, main = "With Short Sale") 
 # plot efficient frontier (and inefficient portfolios below the min var portfolio)
 mufree_p = mean(return$`Treasury Bill 3 month (rf)`)# input value of risk-free interest rate
 points(0, mufree_p, cex = 4, pch = "*") # show risk-free asset
@@ -253,7 +294,7 @@ for(i in 1:12){
 weights_mvp <- weights_p[ind2_p,]
 weights_mvp <- t(data.frame(weights_mvp))
 colnames(weights_mvp) <- colnames(return[2:13])
-weights_mvp
+knitr::kable(round(weights_mvp*100,2))
 (mvp_meanreturn_ann <- mvp_meanreturn*12)
 (mvp_sd_ann <- mvp_sd*sqrt(12))
 
@@ -383,7 +424,13 @@ VAR_wbd = -S0 * q_wbd
 
 VAR_asset <- c(VAR_msft, VAR_tsla, VAR_aapl, VAR_twtr, VAR_amzn, VAR_fb, VAR_nflx,
                VAR_aal, VAR_dal, VAR_bac, VAR_nvda, VAR_wbd)
-cbind(names, VAR_asset)
+var_df <- cbind(names, VAR_asset)
+var_df <- rbind(var_df,VaR_par_mvp)
+var_df[13,1] <- c("MVP")
+var_df[13,2] <- 6285.69101812641
+colnames(var_df) <- c("Assets", "Var")
+
+knitr::kable(var_df)
 ```
 
 #### Assets' Sharpe's Ratios
@@ -420,7 +467,7 @@ for (i in 1:length(mu_P_noss)) { # find the optimal portfolios
   weights_p_noss[i, ] = result_noss$solution
 }
 plot(sd_P_noss, mu_P_noss, type = "l", lty = 3, 
-     lwd = 2, xlim = c(0,15), ylim = c(0,7)) 
+     lwd = 2, xlim = c(0,15), ylim = c(0,7), main = "Without Short Sale") 
 # plot efficient frontier (and inefficient portfolios below the min var portfolio)
 #mufree_p = mean(return$`Treasury Bill 3 month (rf)`) # input value of risk-free interest rate
 points(0, mufree_p, cex = 4, pch = "*") # show risk-free asset
@@ -448,6 +495,10 @@ colnames(weights_mvp_noss) <- colnames(return[2:13])
 weights_mvp_noss
 (mvp_meanreturn_ann_noss <- mvp_meanreturn_noss*12)
 (mvp_sd_ann_noss <- mvp_sd_noss*sqrt(12))
+sum(weights_mvp_noss)
+rownames(weights_mvp_noss) <- c("weight")
+knitr::kable(round(weights_mvp_noss*100,4))
+
 
 ### Efficient Portfolio Frontier
 EPF_mean_noss <- mu_P_noss[ind3_p_noss]
@@ -458,7 +509,200 @@ EPF_sd_noss <- sd_P_noss[ind3_p_noss]
 (tan_sd_noss <- sd_P_noss[ind_p_noss])
 (tan_var_noss <- tan_sd_noss^2)
 (tan_sharpes_noss <- (tan_meanreturn_noss-mufree_p)/tan_sd_noss)
+
 ```
+
+```{r warning=FALSE}
+alpha = 0.05
+return_mvp_noss <- rowSums(data.frame(
+  weights_mvp_noss[1] * return[, 2],
+  weights_mvp_noss[2] * return[, 3],
+  weights_mvp_noss[3] * return[, 4],
+  weights_mvp_noss[4] * return[, 5],
+  weights_mvp_noss[5] * return[, 6],
+  weights_mvp_noss[6] * return[, 7],
+  weights_mvp_noss[7] * return[, 8],
+  weights_mvp_noss[8] * return[, 9],
+  weights_mvp_noss[9] * return[, 10],
+  weights_mvp_noss[10] * return[, 11],
+  weights_mvp_noss[11] * return[, 12],
+  weights_mvp_noss[12] * return[, 13]))
+fitt_mvp_noss = fitdistr(return_mvp_noss,"t")
+param_mvp_noss = as.numeric(fitt_mvp_noss$estimate)
+mean_mvpfit_noss = param_mvp_noss[1]
+df_mvpfit_noss = param_mvp_noss[3]
+sd_mvpfit_noss = param_mvp_noss[2] * sqrt((df_mvpfit_noss) / (df_mvpfit_noss - 2))
+lambda_mvpfit_noss = param_mvp_noss[2]
+qalpha_mvp_noss = qt(alpha, df = df_mvpfit_noss)
+VaR_par_mvp_noss = -100000 * (mean_mvpfit_noss + lambda_mvpfit_noss * qalpha_mvp_noss)
+es1_mvp_noss = dt(qalpha_mvp_noss, df = df_mvpfit_noss) / (alpha)
+es2_mvp_noss=(df_mvpfit_noss+qalpha_mvp_noss^2)/(df_mvpfit_noss-1)
+es3_mvp_noss=-mean_mvpfit_noss+lambda_mvpfit_noss*es1_mvp_noss*es2_mvp_noss
+ES_par_mvp_noss = 100000*es3_mvp_noss
+VaR_par_mvp_noss
+ES_par_mvp_noss
+```
+
+##4. Asset Allocation
+
+### Efficient Portfolio
+```{r}
+#efficient portfolio
+new_dat = return[,2:13]
+return_year = 12*colMeans(new_dat)
+
+cov_mat = cov(new_dat)
+eff_port = efficient.portfolio(er = return_year,cov_mat,target.return = 0.06,shorts = FALSE)
+eff_port$er/12
+
+#check return
+ret=0
+for (i in 1:12)
+{
+  val = as.numeric(return_year[i])*as.numeric(eff_port$weights[i])
+  ret = ret+val
+  
+}
+ret
+
+#monthly risk
+eff_risk = eff_port$sd/sqrt(12)
+eff_risk
+```
+
+```{r}
+# vaR = -S0*(u + qnorm(0.05)*sd)
+S0 = 100000
+q = qnorm(0.05)
+eff_var = -S0*(eff_port$er/12 + q*eff_risk)
+eff_var
+#excel
+cut_off = qnorm(0.05,mean = (1+eff_port$er/12)*S0,sd = S0*eff_risk)
+var2 = S0-cut_off
+var2
+var2/S0
+```
+```{r}
+#Expected Shortfall
+S0*((-eff_port$er/12) + (dnorm(qnorm(0.05))/0.05)* eff_risk)
+```
+
+### Tangency portfolio
+```{r}
+risk_free = colMeans(return[,15]/100)
+
+tan_port = tangency.portfolio(er=return_year, cov.mat=cov_mat, risk.free=risk_free,shorts=FALSE)
+tan_port
+# w1 for tangency portfolio, w1 for risk free
+# w1+w2 = 1
+# 0.4799845 * w1 + 0.08543894 * w2 = 0.06
+
+# 1.3041868% for the tangency portfolio and -0.3041868% for the risk free
+
+A = matrix(c(1, tan_port$er, 1, as.numeric(risk_free)), ncol=2)
+B = matrix(c(1, 0.06),ncol = 1)
+solve(A)%*%B
+```
+
+```{r}
+#vaR
+S0 = 100000
+q = qnorm(0.05)
+eff_var = -S0*(0.05/12 + q*0.06885209/sqrt(12))
+eff_var
+eff_var/S0
+```
+
+```{r}
+#ES 
+S0*((-0.05/12) + (dnorm(qnorm(0.05))/0.05)* 0.06885209/sqrt(12))
+```
+
+## 5. PCA
+
+### correlation matrix of the returns on your assets.
+AAL and DAL are the assets that most highly correlated with correlation = 0.78.
+If we only consider about the 12 assets, then NFLX and DAL has the lowest correlation = 0.0089.
+The NFLX also has a correlation with Treasury Bill 3 month (risk free) = 0.006.
+
+Diversification will reduce risk for the assets that are negatively correlated.
+For example, if the correlation between 2 assets is -1, which is the perfect value for diversification,
+if one asset goes up 5%, the other asset will goes down 5%. So combining these 2 assets would
+minimize our risk to 0.
+In our 12 assets, we did not see any negative correlation. As a result, diversification will not reduce risk.
+
+(note: here are a few assets that are slightly correlated such as NFLX and DAL,
+NFLX and AAL, TWTR and AAL, NVDA and WBD, MSFT and TWTR.)
+
+```{r}
+library(car)
+df <- return[,2:13]
+# correlation matrix 
+panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...) {
+    usr <- par("usr")
+    on.exit(par(usr))
+    par(usr = c(0, 1, 0, 1))
+    Cor <- abs(cor(x, y)) 
+    txt <- paste0(prefix, format(c(Cor, 0.123456789), digits = digits)[1])
+    if(missing(cex.cor)) {
+        cex.cor <- 0.4 / strwidth(txt)
+    }
+    text(0.5, 0.5, txt,
+         cex = 1 + cex.cor * Cor) 
+}
+
+pairs(df,
+      upper.panel = panel.cor,    # Correlation panel
+      lower.panel = panel.smooth) # Smoothed regression lines
+```
+Parallel coordinate plot
+```{r}
+parcoords(df, rownames = F, reorderable = T , queue = T, 
+          withD3 = TRUE, alpha=0.5)
+```
+
+### PCA Analysis
+
+Another way to dig into the correlation between the return of the assets, we looked at PCA and its plots.
+PCA helps to reduce the dimension of the dataset and compute principal components that contain most of the information in the data.
+From the PCA Analysis, we found that first eight components captures almost 90% of the total variance,
+while nine components could explain 93% of the variance. 
+The Scree Plot shows that the unexplained part drop quickly by adding PC1 to PC6, and gradually slower after that.
+Therefore, using around 6 to 9 PCs would explain the majority of the variance in our data.
+
+To further developed the correlations, we also draw a biplot. According to the principle of the biplots,
+the variables are positively correlated if their vectors form an angle smaller than 90 degrees.
+From our plot, all the assets are having a acute angle, so we conclude that they all having
+a positively relationship.
+```{r}
+df = return[,2:13]
+model_pca = prcomp(df, center = TRUE, scale. = TRUE)
+su = summary(model_pca)
+su
+
+screeplot(model_pca, type = "line", main = "Scree plot")
+
+autoplot(model_pca,  loadings = TRUE, loadings.colour = 'blue',
+         loadings.label = TRUE)
+#model_pca$rotation[,1:2]
+```
+
+### factor analysis
+```{r}
+X = scale(df,center=T,scale=T)
+n=fa.parallel(X)
+df.fa = fa(X,nfactors = 4,fm="mle",rotate = "varimax")
+fa.diagram(df.fa)
+```
+
+
+```{r}
+faa1 = factanal(df,factor=3,rotation = "varimax")
+faa1
+```
+
+
+
 
 
 
